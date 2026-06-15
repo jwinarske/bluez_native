@@ -47,7 +47,7 @@ class PairingAgent {
 
   // Pending async results, keyed by request ID.
   struct PendingRequest {
-    uint8_t type;
+    uint8_t type{};
     std::variant<sdbus::Result<std::string>,  // RequestPinCode
                  sdbus::Result<uint32_t>,     // RequestPasskey
                  sdbus::Result<>,             // Confirmation/Authorization
