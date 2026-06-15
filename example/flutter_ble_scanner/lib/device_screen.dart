@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:bluez_native_comms/bluez_native_comms.dart';
+import 'package:bluez_native/bluez_native.dart';
 import 'package:flutter/material.dart';
 
 import 'characteristic_screen.dart';
@@ -20,23 +20,20 @@ class DeviceScreen extends StatefulWidget {
 }
 
 class _DeviceScreenState extends State<DeviceScreen> {
-  bool _connecting = false;
+  bool _busy = false;
   StreamSubscription<List<String>>? _propsSub;
   StreamSubscription<BlueZAdapter>? _adapterSub;
 
   @override
   void initState() {
     super.initState();
-    // Monitor device property changes (Connected, ServicesResolved, etc.)
     _propsSub = widget.device.propertiesChanged.listen(_onDeviceChanged);
-    // Monitor adapter power — if powered off, pop back.
     _adapterSub = widget.client.adapterChanged.listen(_onAdapterChanged);
   }
 
   void _onDeviceChanged(List<String> changed) {
     if (!mounted) return;
-    if (changed.contains('Connected') && !widget.device.connected) {
-      // Device disconnected — pop back to scanner.
+    if (changed.contains('Connected') && !widget.device.connected && !_busy) {
       Navigator.of(context).popUntil((route) => route.isFirst);
       return;
     }
@@ -46,30 +43,47 @@ class _DeviceScreenState extends State<DeviceScreen> {
   void _onAdapterChanged(BlueZAdapter adapter) {
     if (!mounted) return;
     if (!adapter.powered) {
-      // Adapter powered off — pop back to scanner.
       Navigator.of(context).popUntil((route) => route.isFirst);
-      return;
     }
   }
 
   Future<void> _connect() async {
-    setState(() => _connecting = true);
+    setState(() => _busy = true);
     try {
       await widget.device.connect();
       await widget.device.waitForServicesResolved();
-    } on BlueZOperationException catch (e) {
+    } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Connection failed: ${e.message}')),
+          SnackBar(content: Text('Connection failed: $e')),
         );
       }
     }
-    if (mounted) setState(() => _connecting = false);
+    if (mounted) setState(() => _busy = false);
   }
 
   Future<void> _disconnect() async {
     await widget.device.disconnect();
-    // The _onDeviceChanged listener will pop back when Connected becomes false.
+  }
+
+  Future<void> _pair() async {
+    setState(() => _busy = true);
+    try {
+      await widget.device.pair();
+      // pair() completes while still connected — just update UI.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pairing successful')),
+        );
+      }
+    } on Exception catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pairing failed: $e')),
+        );
+      }
+    }
+    if (mounted) setState(() => _busy = false);
   }
 
   @override
@@ -88,7 +102,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       appBar: AppBar(
         title: Text(device.name.isNotEmpty ? device.name : device.address),
         actions: [
-          if (_connecting)
+          if (_busy)
             const Padding(
               padding: EdgeInsets.all(16),
               child: SizedBox(
@@ -97,42 +111,66 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             )
-          else
+          else ...[
+            if (device.connected && !device.paired)
+              TextButton(onPressed: _pair, child: const Text('Pair')),
             TextButton(
               onPressed: device.connected ? _disconnect : _connect,
               child: Text(device.connected ? 'Disconnect' : 'Connect'),
             ),
+          ],
         ],
       ),
-      body: !device.connected
-          ? const Center(child: Text('Not connected. Tap Connect.'))
-          : services.isEmpty
-              ? const Center(child: Text('No services discovered.'))
-              : ListView.builder(
-                  itemCount: services.length,
-                  itemBuilder: (context, index) {
-                    final service = services[index];
-                    return ExpansionTile(
-                      title: Text(service.uuid.toString()),
-                      subtitle: Text(service.primary ? 'Primary' : 'Secondary'),
-                      children: service.characteristics.map((char) {
-                        return ListTile(
-                          title: Text(char.uuid.toString()),
-                          subtitle: Text(
-                              'Flags: ${char.flags.map((f) => f.name).join(', ')}'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  CharacteristicScreen(characteristic: char),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
+      body: _buildBody(device, services),
+    );
+  }
+
+  Widget _buildBody(BlueZDevice device, List<BlueZGattService> services) {
+    if (!device.connected) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(device.paired ? 'Paired' : 'Not paired',
+                style: TextStyle(
+                    color: device.paired ? Colors.green : Colors.grey)),
+            const SizedBox(height: 8),
+            const Text('Tap Connect to discover services.'),
+          ],
+        ),
+      );
+    }
+
+    if (services.isEmpty) {
+      if (_busy) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      return const Center(child: Text('No GATT services available.'));
+    }
+
+    return ListView.builder(
+      itemCount: services.length,
+      itemBuilder: (context, index) {
+        final service = services[index];
+        return ExpansionTile(
+          title: Text(service.uuid.toString()),
+          subtitle: Text(service.primary ? 'Primary' : 'Secondary'),
+          children: service.characteristics.map((char) {
+            return ListTile(
+              title: Text(char.uuid.toString()),
+              subtitle:
+                  Text('Flags: ${char.flags.map((f) => f.name).join(', ')}'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => CharacteristicScreen(characteristic: char),
                 ),
+              ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }

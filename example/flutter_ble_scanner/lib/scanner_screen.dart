@@ -1,9 +1,10 @@
 import 'dart:async';
 
-import 'package:bluez_native_comms/bluez_native_comms.dart';
+import 'package:bluez_native/bluez_native.dart';
 import 'package:flutter/material.dart';
 
 import 'device_screen.dart';
+import 'pairing_dialog.dart';
 
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
@@ -15,10 +16,13 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen> {
   final _client = BlueZClient();
   final _devices = <String, BlueZDevice>{};
-  StreamSubscription<BlueZDevice>? _deviceSub;
+  StreamSubscription<BlueZDevice>? _deviceAddedSub;
+  StreamSubscription<BlueZDevice>? _deviceChangedSub;
   StreamSubscription<BlueZAdapter>? _adapterSub;
+  StreamSubscription<BlueZAgentRequest>? _agentSub;
   bool _scanning = false;
   bool _connected = false;
+  bool _agentRegistered = false;
   String? _error;
 
   BlueZAdapter? get _adapter =>
@@ -38,20 +42,20 @@ class _ScannerScreenState extends State<ScannerScreen> {
       if (!mounted) return;
       setState(() {
         _connected = true;
-        // Seed with devices already known to BlueZ from previous scans.
         for (final device in _client.devices) {
           _devices[device.address] = device;
         }
       });
-      _deviceSub = _client.deviceAdded.listen((device) {
+      _deviceAddedSub = _client.deviceAdded.listen((device) {
         if (mounted) setState(() => _devices[device.address] = device);
       });
-      // Monitor adapter power state changes.
+      _deviceChangedSub = _client.deviceChanged.listen((device) {
+        if (mounted) setState(() {});
+      });
       _adapterSub = _client.adapterChanged.listen((adapter) {
         if (!mounted) return;
         setState(() {
           if (adapter.powered) {
-            // Adapter just powered on — seed with known devices.
             for (final device in _client.devices) {
               _devices[device.address] = device;
             }
@@ -61,10 +65,20 @@ class _ScannerScreenState extends State<ScannerScreen> {
           }
         });
       });
+
+      // Register the pairing agent and listen for requests.
+      _client.registerAgent();
+      _agentRegistered = true;
+      _agentSub = _client.agentRequest.listen(_onAgentRequest);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
     }
+  }
+
+  void _onAgentRequest(BlueZAgentRequest req) {
+    if (!mounted) return;
+    showPairingDialog(context, _client, req);
   }
 
   Future<void> _toggleScan() async {
@@ -73,7 +87,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     if (!_powered) {
       await adapter.setPowered(true);
-      // Give BlueZ a moment to bring the adapter up.
       await Future<void>.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
       setState(() {});
@@ -90,7 +103,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   @override
   void dispose() {
-    _deviceSub?.cancel();
+    _agentSub?.cancel();
+    if (_agentRegistered) {
+      _client.unregisterAgent();
+    }
+    _deviceAddedSub?.cancel();
+    _deviceChangedSub?.cancel();
     _adapterSub?.cancel();
     _client.close();
     super.dispose();
@@ -140,7 +158,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
       appBar: AppBar(
         title: const Text('BLE Scanner'),
         actions: [
-          // Adapter power indicator.
           if (_connected)
             Icon(
               _powered ? Icons.bluetooth : Icons.bluetooth_disabled,
