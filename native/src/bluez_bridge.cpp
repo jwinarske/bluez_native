@@ -226,21 +226,15 @@ void bluez_device_cancel_pairing(void* handle, const char* device_path) {
   }
 }
 
-void bluez_device_set_property(void* handle,
-                               const char* device_path,
-                               const char* prop_name,
-                               const uint8_t* value_json,
-                               int32_t len) {
+void bluez_device_set_trusted(void* handle,
+                              const char* device_path,
+                              bool value) {
   try {
     auto* ctx = static_cast<BridgeContext*>(handle);
     DeviceBridge device(*ctx->conn, device_path);
-
-    if (len == 1) {
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-      device.set_property_bool(prop_name, value_json[0] != 0);
-    }
+    device.set_trusted(value);
   } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_device_set_property: %s\n", e.what());
+    fprintf(stderr, "bluez_device_set_trusted: %s\n", e.what());
   }
 }
 

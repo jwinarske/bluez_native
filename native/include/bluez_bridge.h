@@ -51,11 +51,9 @@ BLUEZ_EXPORT void bluez_device_pair(void* handle,
                                     int64_t result_port);
 BLUEZ_EXPORT void bluez_device_cancel_pairing(void* handle,
                                               const char* device_path);
-BLUEZ_EXPORT void bluez_device_set_property(void* handle,
-                                            const char* device_path,
-                                            const char* prop_name,
-                                            const uint8_t* value_json,
-                                            int32_t len);
+BLUEZ_EXPORT void bluez_device_set_trusted(void* handle,
+                                           const char* device_path,
+                                           bool value);
 
 // ── GATT characteristic operations ──────────────────────────────────────────
 BLUEZ_EXPORT void bluez_char_read_value(void* handle,

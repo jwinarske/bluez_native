@@ -61,6 +61,26 @@ class BlueZAdapter {
     );
   }
 
+  /// Set whether the adapter is discoverable.
+  Future<void> setDiscoverable(bool value) async {
+    BlueZBindings.adapterSetPropertyBool(
+      _clientHandle,
+      objectPath,
+      'Discoverable',
+      value,
+    );
+  }
+
+  /// Set whether the adapter is pairable.
+  Future<void> setPairable(bool value) async {
+    BlueZBindings.adapterSetPropertyBool(
+      _clientHandle,
+      objectPath,
+      'Pairable',
+      value,
+    );
+  }
+
   /// Unblock Bluetooth via rfkill if soft-blocked.
   Future<void> _rfkillUnblock() async {
     try {

@@ -163,6 +163,12 @@ class BlueZBindings {
         void Function(Pointer<Void>, Pointer<Utf8>)
       >('bluez_device_cancel_pairing');
 
+  static final _deviceSetTrusted = _lib
+      .lookupFunction<
+        Void Function(Pointer<Void>, Pointer<Utf8>, Bool),
+        void Function(Pointer<Void>, Pointer<Utf8>, bool)
+      >('bluez_device_set_trusted');
+
   static void deviceConnect(Object handle, String path, int resultPort) {
     final p = path.toNativeUtf8();
     _deviceConnect(handle as Pointer<Void>, p, resultPort);
@@ -185,6 +191,12 @@ class BlueZBindings {
     final p = path.toNativeUtf8();
     _deviceCancelPairing(handle as Pointer<Void>, p);
     calloc.free(p);
+  }
+
+  static void deviceSetTrusted(Object handle, String path, bool value) {
+    final dp = path.toNativeUtf8();
+    _deviceSetTrusted(handle as Pointer<Void>, dp, value);
+    calloc.free(dp);
   }
 
   // ── GATT characteristic operations ────────────────────────────────────────
