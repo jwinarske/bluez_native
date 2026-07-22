@@ -1,4 +1,5 @@
-// codec.dart — GlazeCodec for decoding native_comms Channel B payloads.
+// codec.dart — GlazeCodec for decoding the binary event payloads posted
+// from native code.
 // Matches the binary encoding in glaze_meta.h (little-endian, length-prefixed).
 
 import 'dart:convert';

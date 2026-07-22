@@ -1,6 +1,6 @@
-// glaze_meta.h — lightweight compile-time struct reflection for native_comms
-// Channel B payloads. Provides glz::meta<T> and glz::field() used by
-// bluez_types.h to describe struct fields for binary serialization.
+// glaze_meta.h — lightweight compile-time struct reflection for the binary
+// event payloads posted to Dart. Provides glz::meta<T> and glz::field(), used
+// by bluez_types.h to describe struct fields for serialization.
 //
 // Includes encode/decode overloads for the BlueZ-specific types used here
 // (int16_t, uint16_t, vector<uint8_t>, map, nested structs).

@@ -27,7 +27,7 @@
 
 - Initial release.
 - BlueZClient, BlueZAdapter, BlueZDevice APIs matching canonical/bluez.dart.
-- Zero-copy characteristic notifications via native_comms Channel B.
+- Zero-copy characteristic notifications via `Dart_PostCObject_DL`.
 - StartNotify / StopNotify via org.bluez.GattCharacteristic1.
 - ReadValue / WriteValue for characteristics and descriptors.
 - Discovery filter support (transport, RSSI threshold, UUIDs).
