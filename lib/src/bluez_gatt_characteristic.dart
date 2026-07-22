@@ -16,7 +16,7 @@ import 'ffi/types.dart';
 /// A GATT characteristic on a remote Bluetooth device.
 class BlueZGattCharacteristic {
   final Object _clientHandle;
-  final BlueZGattCharProps _props;
+  BlueZGattCharProps _props;
 
   final _valueCtrl = StreamController<List<int>>.broadcast();
   final _descriptors = <String, BlueZGattDescriptor>{};
@@ -133,6 +133,40 @@ class BlueZGattCharacteristic {
 
   // Called by BlueZClient._onEvent when 0x03 arrives.
   void postValue(List<int> bytes) => _valueCtrl.add(bytes);
+
+  /// Merges a partial property update, emitting on [value] only when the
+  /// update actually carried a value.
+  ///
+  /// Before this existed, a 0x03 event unconditionally pushed `props.value`
+  /// onto the stream -- so a Notifying-only change would have emitted a
+  /// spurious empty payload -- and `notifying` was never refreshed at all.
+  void mergeChanged(BlueZGattCharProps changed) {
+    const valueBit = 1 << 0;
+    const notifyingBit = 1 << 1;
+    const mtuBit = 1 << 2;
+    final mask = changed.changedMask;
+
+    if (mask & (notifyingBit | mtuBit) != 0) {
+      _props = BlueZGattCharProps(
+        objectPath: _props.objectPath,
+        servicePath: _props.servicePath,
+        uuid: _props.uuid,
+        value: _props.value,
+        notifying: mask & notifyingBit != 0
+            ? changed.notifying
+            : _props.notifying,
+        writeAcquired: _props.writeAcquired,
+        notifyAcquired: _props.notifyAcquired,
+        handle: _props.handle,
+        mtu: mask & mtuBit != 0 ? changed.mtu : _props.mtu,
+        flags: _props.flags,
+        changedMask: _props.changedMask,
+      );
+    }
+    if (mask & valueBit != 0) {
+      _valueCtrl.add(changed.value);
+    }
+  }
 
   void addDescriptor(BlueZGattDescriptor d) => _descriptors[d.objectPath] = d;
 }

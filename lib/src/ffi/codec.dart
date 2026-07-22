@@ -86,6 +86,8 @@ class GlazeCodec {
       handle: r.readUint16(),
       mtu: r.readUint16(),
       flags: r.readStringList(),
+      // Appended last, mirroring glz::meta<BlueZGattCharProps>.
+      changedMask: r.readUint32(),
     );
   }
 
