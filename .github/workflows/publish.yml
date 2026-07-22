@@ -20,6 +20,14 @@ jobs:
         with: { submodules: recursive }
       - uses: dart-lang/setup-dart@v1
         with: { sdk: stable }
+      # The build hook drives CMake, which needs the sdbus-cpp system
+      # dependencies. Without these `dart test` fails while configuring
+      # third_party/sdbus-cpp, before publishing is ever attempted.
+      - name: Install deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config libsystemd-dev
       - run: dart pub get
       - run: dart analyze --fatal-infos
       - run: dart test
