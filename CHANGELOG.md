@@ -1,3 +1,41 @@
+## 0.3.0
+
+- **Breaking**: Wire format changed — changedMask field added to GATT
+  characteristic props. Requires matching native library rebuild.
+- **Breaking**: startNotify() and stopNotify() now verify the Notifying
+  property after the D-Bus reply and throw BlueZOperationException with
+  org.bluez.Error.NotifyNotEnabled or org.bluez.Error.NotifyStillEnabled when
+  it does not match the requested state. A successful method reply alone does
+  not prove the notification state changed: BlueZ scopes a notification
+  session to the requesting D-Bus client, so a client that does not outlive
+  the call sees StartNotify succeed while Notifying stays false and no
+  PropertiesChanged arrives.
+- Fix BlueZGattCharacteristic.notifying keeping its discovery-time value while
+  notifications were arriving. PropertiesChanged updates carrying Notifying or
+  MTU were dropped because the handler returned early unless the update
+  carried Value.
+- Fix the PropertiesChanged listener being registered inside the StartNotify
+  reply handler. BlueZ emits Notifying=true while servicing the call, so the
+  signal had already been delivered. The subscription is now registered before
+  the call and rolled back if it fails; on the stop path the unsubscribe is
+  deferred until the property read resolves.
+- Fix an exception escaping the characteristic PropertiesChanged handler when
+  a peer sends an unexpected variant type, which took down the D-Bus event
+  loop thread and every other subscription on it.
+- Add BlueZGattCharacteristic.mergeChanged, which merges partial property
+  updates and emits on the value stream only when the update carried a value.
+- Add example/notify_regression.dart, which asserts the notifying state
+  transitions around subscribing rather than only that bytes arrive.
+- Document that the glaze_meta.h length and count prefixes are uint32 while
+  other implementations of the same encoding use uint64.
+- Restore the verbatim Apache-2.0 license text. Three sentences of the
+  operative text had been reworded and the appendix was absent, so the file
+  did not match the license it names.
+- Raise the hooks constraint to ^2.1.0.
+- Shorten the package description and drop the documentation URL, which
+  pointed at a page that does not exist.
+- Add example/README.md describing each example.
+
 ## 0.2.0
 
 - **Breaking**: Wire format changed — changedMask field added to adapter and

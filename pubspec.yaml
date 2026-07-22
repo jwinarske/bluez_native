@@ -1,13 +1,12 @@
 name: bluez_native
 description: >-
-  High-performance BlueZ Bluetooth client for Linux, built on sdbus-cpp. Zero-copy characteristic notifications via Dart_PostCObject_DL.
-  Drop-in API replacement for canonical/bluez.dart with lower latency.
-version: 0.2.0
+  High-performance BlueZ client for Linux with zero-copy GATT notifications.
+  API-compatible with canonical/bluez.dart, with lower latency.
+version: 0.3.0
 
 homepage:       https://github.com/jwinarske/bluez_native
 repository:     https://github.com/jwinarske/bluez_native
 issue_tracker:  https://github.com/jwinarske/bluez_native/issues
-documentation:  https://pub.dev/documentation/bluez_native/latest/
 
 environment:
   sdk: ^3.10.0
@@ -18,7 +17,7 @@ platforms:
 dependencies:
   code_assets: ^1.0.0
   ffi:         ^2.1.0
-  hooks:       ^1.0.2
+  hooks: ^2.1.0
   path:        ^1.9.0
 
 dev_dependencies:
