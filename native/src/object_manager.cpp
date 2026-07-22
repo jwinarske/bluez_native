@@ -123,14 +123,38 @@ void ObjectManager::subscribe_char_notify(const std::string& char_path) {
         if (iface != kGattCharIface) {
           return;
         }
-        auto it = changed.find("Value");
-        if (it == changed.end()) {
+        // Forward Notifying and MTU alongside Value. Previously only Value
+        // was relayed, so the Dart-side `notifying` getter never left its
+        // discovery-time value -- it read false while notifications were
+        // actively arriving.
+        BlueZGattCharProps p;
+        p.objectPath = char_path;
+
+        // Variant::get<T> throws when the peer sends an unexpected type. This
+        // runs on the D-Bus event loop thread, where an escaping exception
+        // takes down the loop and with it every other subscription. Drop the
+        // malformed update instead.
+        try {
+          if (auto it = changed.find("Value"); it != changed.end()) {
+            p.value = it->second.get<std::vector<uint8_t>>();
+            p.changedMask |= kCharValueBit;
+          }
+          if (auto it = changed.find("Notifying"); it != changed.end()) {
+            p.notifying = it->second.get<bool>();
+            p.changedMask |= kCharNotifyingBit;
+          }
+          if (auto it = changed.find("MTU"); it != changed.end()) {
+            p.mtu = it->second.get<uint16_t>();
+            p.changedMask |= kCharMTUBit;
+          }
+        } catch (const sdbus::Error&) {
           return;
         }
 
-        BlueZGattCharProps p;
-        p.objectPath = char_path;
-        p.value = it->second.get<std::vector<uint8_t>>();
+        // Nothing we track changed; stay off the hot path.
+        if (p.changedMask == 0) {
+          return;
+        }
         post_glaze(0x03, p);
       });
 
@@ -365,6 +389,8 @@ BlueZGattCharProps ObjectManager::extract_char_props(
   c.handle = get_prop<uint16_t>(props, "Handle");
   c.mtu = get_prop<uint16_t>(props, "MTU");
   c.flags = get_prop<std::vector<std::string>>(props, "Flags");
+  // Full snapshot: every field is authoritative.
+  c.changedMask = ~0u;
   return c;
 }
 

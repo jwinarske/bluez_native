@@ -1,10 +1,31 @@
-// glaze_meta.h — lightweight compile-time struct reflection for native_comms
-// Channel B payloads. Provides glz::meta<T> and glz::field() used by
-// bluez_types.h to describe struct fields for binary serialization.
+// glaze_meta.h — lightweight compile-time struct reflection for the binary
+// event payloads posted to Dart. Provides glz::meta<T> and glz::field(), used
+// by bluez_types.h to describe struct fields for serialization.
 //
-// Vendored from native_comms and extended with encode/decode overloads for
-// BlueZ-specific types (int16_t, uint16_t, vector<uint8_t>, map, nested
-// structs).
+// Includes encode/decode overloads for the BlueZ-specific types used here
+// (int16_t, uint16_t, vector<uint8_t>, map, nested structs).
+//
+// ===========================================================================
+// WIRE FORMAT — prefixes here are uint32, not uint64
+//
+//   strings   uint32 length
+//   arrays    uint32 count
+//   vectors   uint32 count
+//   maps      uint32 count
+//
+// Other implementations of this same binary encoding use uint64 throughout.
+// Any codec ported in from one of them must have its prefix width narrowed,
+// and any codec ported out of here must have it widened.
+//
+// Getting this wrong is not a clean failure. A uint64 read consumes the first
+// four bytes of string *data* as the high half of the length and yields an
+// absurd value -- observed in practice as a length of 1022648283161427971
+// decoded from a 106-byte payload. The symptom points nowhere near the cause.
+//
+// Readers should bounds-check the prefix against the remaining payload and
+// fail with a named error; the alternative is an allocation attempt measured
+// in exabytes.
+// ===========================================================================
 
 #pragma once
 

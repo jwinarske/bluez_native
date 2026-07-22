@@ -74,23 +74,99 @@ void GattCharBridge::write_value_async(sdbus::IConnection& conn,
           });
 }
 
+// Verifies the Notifying property after a Start/StopNotify reply.
+//
+// A successful method reply does NOT prove notifications changed state.
+// BlueZ scopes a notification session to the D-Bus client that requested it,
+// so a short-lived client (or one whose connection is torn down and recreated
+// per operation) sees StartNotify succeed while Notifying silently stays
+// false and no PropertiesChanged ever arrives. That failure presents as "the
+// peripheral stopped responding" and is thoroughly unpleasant to trace.
+//
+// This bridge holds one long-lived connection, so it should not hit that --
+// but checking is nearly free and converts a silent no-op into an exception.
+//
+// The read is async: this runs on the event loop thread, where a synchronous
+// D-Bus call can deadlock.
+//
+// If the verification itself fails we report success. An unreadable property
+// is not evidence the operation failed, and failing here would break working
+// callers for no reason.
+void GattCharBridge::verify_notifying(
+    const std::shared_ptr<sdbus::IProxy>& proxy,
+    const std::string& char_path,
+    bool expected,
+    Dart_Port_DL result_port,
+    const std::function<void()>& on_complete) {
+  // sdbus::apply invokes the reply handler with by-value arguments; const&
+  // parameters do not bind and the template fails to instantiate. Do not
+  // "optimize" these into references.
+  // NOLINTBEGIN(performance-unnecessary-value-param)
+  proxy->getPropertyAsync("Notifying")
+      .onInterface(kGattCharIface)
+      .uponReplyInvoke([proxy, char_path, expected, result_port, on_complete](
+                           std::optional<sdbus::Error> error,
+                           sdbus::Variant value) {
+        if (on_complete) {
+          on_complete();
+        }
+        if (error) {
+          post_success(result_port);
+          return;
+        }
+        bool actual = false;
+        try {
+          actual = value.get<bool>();
+        } catch (...) {
+          post_success(result_port);
+          return;
+        }
+        if (actual == expected) {
+          post_success(result_port);
+        } else if (expected) {
+          post_error(
+              result_port, char_path, "org.bluez.Error.NotifyNotEnabled",
+              "StartNotify returned success but Notifying is still false. "
+              "BlueZ scopes the notification session to the requesting D-Bus "
+              "client; no value notifications will arrive.");
+        } else {
+          post_error(result_port, char_path,
+                     "org.bluez.Error.NotifyStillEnabled",
+                     "StopNotify returned success but Notifying is still true; "
+                     "value notifications may continue to arrive.");
+        }
+      });
+  // NOLINTEND(performance-unnecessary-value-param)
+}
+
 void GattCharBridge::start_notify_async(sdbus::IConnection& conn,
                                         const std::string& char_path,
                                         ObjectManager& obj_mgr,
                                         Dart_Port_DL result_port) {
   auto proxy = make_proxy(conn, char_path);
 
+  // Subscribe BEFORE calling StartNotify, not after.
+  //
+  // BlueZ emits PropertiesChanged for Notifying=true while servicing
+  // StartNotify. Registering the listener in the reply handler is too late --
+  // the signal has already been delivered, so the cached `notifying` state
+  // stays false forever even though notifications are flowing. Value
+  // notifications happen to arrive later and so were unaffected, which is why
+  // this went unnoticed.
+  obj_mgr.subscribe_char_notify(char_path);
+
   proxy->callMethodAsync("StartNotify")
       .onInterface(kGattCharIface)
       .uponReplyInvoke([proxy, char_path, &obj_mgr,
                         result_port](std::optional<sdbus::Error> error) {
         if (error) {
+          // Roll back the early subscription so a failed StartNotify does not
+          // leave a listener behind.
+          obj_mgr.unsubscribe_char_notify(char_path);
           post_error(result_port, char_path, error->getName(),
                      error->getMessage());
         } else {
-          // Wire up PropertiesChanged for Value notifications.
-          obj_mgr.subscribe_char_notify(char_path);
-          post_success(result_port);
+          verify_notifying(proxy, char_path, /*expected=*/true, result_port);
         }
       });
 }
@@ -109,8 +185,13 @@ void GattCharBridge::stop_notify_async(sdbus::IConnection& conn,
           post_error(result_port, char_path, error->getName(),
                      error->getMessage());
         } else {
-          obj_mgr.unsubscribe_char_notify(char_path);
-          post_success(result_port);
+          // Unsubscribe only after the property read resolves. Tearing the
+          // subscription down first would drop a Notifying=false signal that
+          // arrives after the reply, leaving the cached state stuck at true.
+          verify_notifying(proxy, char_path, /*expected=*/false, result_port,
+                           [&obj_mgr, char_path] {
+                             obj_mgr.unsubscribe_char_notify(char_path);
+                           });
         }
       });
 }

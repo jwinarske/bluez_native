@@ -93,6 +93,20 @@ enum DeviceChangedBit : uint32_t {
   kAliasBit = 1u << 7,
 };
 
+// Which characteristic properties a 0x03 update carries.
+//
+// BlueZ emits PropertiesChanged for Notifying and MTU as well as Value, but
+// only Value was ever forwarded -- so BlueZGattCharacteristic.notifying stayed
+// frozen at its discovery-time value (false) even while notifications were
+// demonstrably flowing. Consumers checking that getter were silently misled.
+//
+// For full snapshots (discovery), changedMask == ~0u.
+enum GattCharChangedBit : uint32_t {
+  kCharValueBit = 1u << 0,
+  kCharNotifyingBit = 1u << 1,
+  kCharMTUBit = 1u << 2,
+};
+
 // ── Device properties ───────────────────────────────────────────────────────
 
 struct BlueZDeviceProps {
@@ -156,6 +170,9 @@ struct BlueZGattCharProps {
   uint16_t handle{};
   uint16_t mtu{};
   std::vector<std::string> flags;
+  // Bitmask of GattCharChangedBit. Appended last so the wire layout of the
+  // preceding fields is unchanged; lib/src/ffi/codec.dart reads it last too.
+  uint32_t changedMask{};
 };
 template <>
 struct glz::meta<BlueZGattCharProps> {
@@ -169,7 +186,8 @@ struct glz::meta<BlueZGattCharProps> {
       glz::field("notifyAcquired", &BlueZGattCharProps::notifyAcquired),
       glz::field("handle", &BlueZGattCharProps::handle),
       glz::field("mtu", &BlueZGattCharProps::mtu),
-      glz::field("flags", &BlueZGattCharProps::flags));
+      glz::field("flags", &BlueZGattCharProps::flags),
+      glz::field("changedMask", &BlueZGattCharProps::changedMask));
 };
 
 // ── GATT service properties ─────────────────────────────────────────────────

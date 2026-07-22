@@ -190,13 +190,13 @@ class BlueZClient {
           _deviceChangedCtrl.add(device);
         }
 
-      case 0x03: // BlueZGattCharProps (characteristic Value changed)
+      case 0x03: // BlueZGattCharProps (Value / Notifying / MTU changed)
         final props = GlazeCodec.decode<BlueZGattCharProps>(msg, 1);
         _devices.values
             .expand((d) => d.gattCharacteristics)
             .where((c) => c.objectPath == props.objectPath)
             .firstOrNull
-            ?.postValue(props.value);
+            ?.mergeChanged(props);
 
       case 0x04: // BlueZDeviceAdded
         final props = GlazeCodec.decode<BlueZDeviceProps>(msg, 1);

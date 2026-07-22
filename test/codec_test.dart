@@ -128,6 +128,8 @@ void main() {
       _writeUint16(b, 11); // handle
       _writeUint16(b, 512); // mtu
       _writeStringList(b, ['read', 'notify']);
+      // changedMask is appended last, mirroring glz::meta<BlueZGattCharProps>.
+      _writeUint32(b, 0x1 | 0x2); // value + notifying
 
       final data = Uint8List.fromList(b.toBytes());
       final props = GlazeCodec.decode<BlueZGattCharProps>(data, 0);
@@ -138,6 +140,7 @@ void main() {
       expect(props.notifying, true);
       expect(props.mtu, 512);
       expect(props.flags, ['read', 'notify']);
+      expect(props.changedMask, 0x3);
     });
 
     test('decodes BlueZValueResult', () {

@@ -8,6 +8,7 @@
 #include <sdbus-c++/sdbus-c++.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -62,6 +63,18 @@ class GattCharBridge {
                          const std::string& object_path,
                          const std::string& error_name,
                          const std::string& error_message);
+
+  // Confirms Notifying reached `expected` after a Start/StopNotify reply,
+  // then posts the final success or error. See the definition for why a
+  // successful method reply is not sufficient evidence on its own.
+  // `on_complete` runs once the property read has resolved, before the
+  // result is posted. Used to defer teardown until the subscription has had
+  // the chance to observe the final Notifying transition.
+  static void verify_notifying(const std::shared_ptr<sdbus::IProxy>& proxy,
+                               const std::string& char_path,
+                               bool expected,
+                               Dart_Port_DL result_port,
+                               const std::function<void()>& on_complete = {});
 };
 
 class GattDescBridge {

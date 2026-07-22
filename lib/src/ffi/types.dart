@@ -114,6 +114,10 @@ class BlueZGattCharProps {
   final int mtu;
   final List<String> flags;
 
+  /// Bitmask of which fields this update carries (GattCharChangedBit).
+  /// ~0 for full snapshots.
+  final int changedMask;
+
   const BlueZGattCharProps({
     required this.objectPath,
     this.servicePath = '',
@@ -125,6 +129,7 @@ class BlueZGattCharProps {
     this.handle = 0,
     this.mtu = 0,
     this.flags = const [],
+    this.changedMask = 0,
   });
 }
 

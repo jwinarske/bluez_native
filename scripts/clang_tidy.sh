@@ -20,7 +20,7 @@ fi
 echo "Using: $(command -v "${CLANG_TIDY}")"
 
 # Only run on project source files — exclude vendored Dart API headers,
-# glaze_meta.h (vendored from native_comms), and third_party/.
+# glaze_meta.h, and third_party/.
 find "${ROOT_DIR}/native/src" "${ROOT_DIR}/native/include" \
     \( -name '*.cpp' -o -name '*.h' \) \
     ! -path '*/third_party/*' \

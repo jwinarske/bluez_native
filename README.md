@@ -1,7 +1,6 @@
 # bluez_native
 
-High-performance BlueZ Bluetooth client for Linux using native_comms and
-sdbus-cpp. Zero-copy characteristic notifications via `Dart_PostCObject_DL`.
+High-performance BlueZ Bluetooth client for Linux, built on sdbus-cpp. Zero-copy characteristic notifications via `Dart_PostCObject_DL`.
 Drop-in API replacement for [`canonical/bluez.dart`](https://github.com/canonical/bluez.dart)
 with lower latency.
 
@@ -203,6 +202,7 @@ Key differences:
 - [`write_characteristic.dart`](example/write_characteristic.dart) — write hex bytes to a characteristic
 - [`read_descriptor.dart`](example/read_descriptor.dart) — read all descriptors on a characteristic
 - [`notify_characteristic.dart`](example/notify_characteristic.dart) — subscribe to notifications
+- [`notify_regression.dart`](example/notify_regression.dart) — assert subscription *state* (`notifying` before/after), not just that bytes arrive
 - [`pair_device.dart`](example/pair_device.dart) — pair with a device
 - [`device_properties.dart`](example/device_properties.dart) — monitor live property changes (RSSI, connection state)
 - [`flutter_ble_scanner/`](example/flutter_ble_scanner/) — Flutter app with scan, connect, and GATT UI
