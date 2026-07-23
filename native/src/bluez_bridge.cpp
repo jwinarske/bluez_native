@@ -47,12 +47,38 @@ struct BridgeContext {
 
 namespace {
 
-std::mutex g_clients_mutex;
-std::unordered_map<uint64_t, std::shared_ptr<BridgeContext>> g_clients;
+/// The live clients.
+///
+/// Held in a function-local static rather than at namespace scope: there is
+/// no static initialisation order to get wrong, and it is constructed the
+/// first time a client is created rather than before main.
+struct ClientRegistry {
+  std::mutex mutex;
+  std::unordered_map<uint64_t, std::shared_ptr<BridgeContext>> clients;
 
-// Starts at 1: zero is what creation returns on failure, and Dart reads that
-// as a null handle.
-uint64_t g_next_client_id = 1;
+  // Starts at 1: zero is what creation returns on failure, and Dart reads
+  // that as a null handle.
+  uint64_t next_id{1};
+};
+
+ClientRegistry& registry() {
+  static ClientRegistry r;
+  return r;
+}
+
+// The C ABI hands Dart a void*, so the token travels as one. These two
+// functions are the only places the conversion happens, which is why the
+// cast is tolerated here and nowhere else.
+//
+// NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
+uint64_t token_of(void* handle) {
+  return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
+}
+
+void* handle_of(uint64_t token) {
+  return reinterpret_cast<void*>(static_cast<uintptr_t>(token));
+}
+// NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
 
 /// The client a token names, or null if it has been destroyed.
 ///
@@ -61,10 +87,10 @@ uint64_t g_next_client_id = 1;
 /// registry immediately -- no later call finds it -- while a call already in
 /// flight finishes against a connection that is still alive.
 std::shared_ptr<BridgeContext> client_for(void* handle) {
-  const auto id = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
-  const std::lock_guard<std::mutex> lock(g_clients_mutex);
-  const auto it = g_clients.find(id);
-  return it == g_clients.end() ? nullptr : it->second;
+  auto& reg = registry();
+  const std::lock_guard<std::mutex> lock(reg.mutex);
+  const auto it = reg.clients.find(token_of(handle));
+  return it == reg.clients.end() ? nullptr : it->second;
 }
 
 }  // namespace
@@ -106,11 +132,12 @@ void* bluez_client_create(int64_t events_port) {
     std::shared_ptr<BridgeContext> client = std::move(ctx);
     uint64_t id = 0;
     {
-      const std::lock_guard<std::mutex> lock(g_clients_mutex);
-      id = g_next_client_id++;
-      g_clients.emplace(id, std::move(client));
+      auto& reg = registry();
+      const std::lock_guard<std::mutex> lock(reg.mutex);
+      id = reg.next_id++;
+      reg.clients.emplace(id, std::move(client));
     }
-    return reinterpret_cast<void*>(static_cast<uintptr_t>(id));
+    return handle_of(id);
   } catch (const sdbus::Error&) {
     // BlueZ service not available — return null so Dart can throw
     // BlueZServiceUnavailableException.
@@ -121,17 +148,17 @@ void* bluez_client_create(int64_t events_port) {
 void bluez_client_destroy(void* handle) {
   std::shared_ptr<BridgeContext> ctx;
   {
-    const auto id = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle));
-    const std::lock_guard<std::mutex> lock(g_clients_mutex);
-    const auto it = g_clients.find(id);
-    if (it == g_clients.end()) {
+    auto& reg = registry();
+    const std::lock_guard<std::mutex> lock(reg.mutex);
+    const auto it = reg.clients.find(token_of(handle));
+    if (it == reg.clients.end()) {
       // Never valid, or already destroyed. Destroying twice is what a
       // close-on-error path followed by an ordinary close looks like, and it
       // is not an error.
       return;
     }
     ctx = std::move(it->second);
-    g_clients.erase(it);
+    reg.clients.erase(it);
   }
 
   // Outside the lock. Leaving the event loop blocks until the loop thread
