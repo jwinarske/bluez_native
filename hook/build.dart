@@ -28,6 +28,31 @@ void main(List<String> args) async {
 
     await Directory(buildDir).create(recursive: true);
 
+    // `dart pub get` does not fetch git submodules, so consuming this package
+    // as a git dependency leaves native/third_party/sdbus-cpp empty and CMake
+    // has nothing to configure. Recover it when the checkout still has a .git;
+    // pub.dev archives are unaffected because publishing bundles the submodule
+    // contents as ordinary files.
+    final sdbus = File('$nativeRoot/third_party/sdbus-cpp/CMakeLists.txt');
+    if (!sdbus.existsSync()) {
+      if (!Directory('$pkgRoot.git').existsSync() &&
+          !File('$pkgRoot.git').existsSync()) {
+        throw StateError(
+          'native/third_party/sdbus-cpp is missing and $pkgRoot has no .git to '
+          'restore it from. Clone with --recurse-submodules.',
+        );
+      }
+      stderr.writeln('sdbus-cpp submodule missing; initializing');
+      await _run('git', [
+        '-C',
+        pkgRoot,
+        'submodule',
+        'update',
+        '--init',
+        '--recursive',
+      ]);
+    }
+
     final hasNinja = await _which('ninja');
 
     if (!File('${buildDir}CMakeCache.txt').existsSync()) {
