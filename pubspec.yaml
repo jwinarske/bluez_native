@@ -2,7 +2,7 @@ name: bluez_native
 description: >-
   High-performance BlueZ client for Linux with zero-copy GATT notifications.
   API-compatible with canonical/bluez.dart, with lower latency.
-version: 0.3.0
+version: 0.3.1
 
 homepage:       https://github.com/jwinarske/bluez_native
 repository:     https://github.com/jwinarske/bluez_native
