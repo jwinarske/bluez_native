@@ -1,3 +1,30 @@
+## 0.3.1
+
+- Fix a use-after-free that took down the process. Every C ABI entry point
+  cast the opaque handle straight to a BridgeContext and dereferenced it, so
+  any call arriving after bluez_client_destroy followed freed memory. It
+  presented as a segfault inside __dynamic_cast on a freed sdbus connection,
+  two frames removed from anything the caller wrote and with no diagnostic.
+
+  The ordering is not exotic: BlueZGattCharacteristic captures the client
+  handle when it is constructed, so a retained characteristic keeps using it
+  after BlueZClient.close, bypassing the null check on the client's own
+  methods.
+
+  Handles are now tokens resolved through a registry, and an entry point
+  whose handle names nothing does nothing. The token is a counter rather than
+  the address of the context: an allocator can reissue a freed address, and a
+  stale handle would then name a different live client and act on it, which
+  is defined behaviour and the wrong client.
+
+  Lookup returns a shared_ptr so a client cannot be destroyed while a call is
+  using it. Destruction removes it from the registry immediately, so no later
+  call finds it, while a call already in flight finishes against a connection
+  that is still alive.
+
+  Destroying a handle that was never issued, or was already destroyed, is not
+  an error.
+
 ## 0.3.0
 
 - **Breaking**: Wire format changed — changedMask field added to GATT
