@@ -1,3 +1,27 @@
+## 0.3.2
+
+- Add a Sensirion SCD41 CO2 gadget example: `example/scd41_co2_sensor.dart`,
+  with the wire protocol factored into `example/sensirion_gadget.dart`. It
+  covers scan, info, live values, history download with sparkline and CSV
+  export, logging interval, LED brightness, rename and forced recalibration.
+
+  The gadget protocol is not published as a spec, so the UUIDs, byte layouts
+  and the 21 sample layouts come from Sensirion's own firmware —
+  arduino-ble-gadget for the services, advertisement header and download
+  packets, arduino-upt-core for the sample layouts. Any gadget built on that
+  library works, not only the SCD4x build.
+
+  Two paths to live values: `scan` and `monitor` decode the
+  manufacturer-specific advertisement data and need no connection at all,
+  while `live` connects and subscribes, which updates faster.
+
+  Verified against a production MyCO2, whose GATT table diverges from the
+  reference firmware more than its shared service UUIDs suggest; the
+  divergences and how each was established are documented in
+  `example/README.md`.
+
+  Library code is unchanged — examples and tests only.
+
 ## 0.3.1
 
 - Fix a use-after-free that took down the process. Every C ABI entry point
