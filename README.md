@@ -205,6 +205,7 @@ Key differences:
 - [`notify_regression.dart`](example/notify_regression.dart) — assert subscription *state* (`notifying` before/after), not just that bytes arrive
 - [`pair_device.dart`](example/pair_device.dart) — pair with a device
 - [`device_properties.dart`](example/device_properties.dart) — monitor live property changes (RSSI, connection state)
+- [`scd41_co2_sensor.dart`](example/scd41_co2_sensor.dart) — complete Sensirion SCD41 CO2 gadget client: advertisement decoding, live values, history download, CSV export
 - [`flutter_ble_scanner/`](example/flutter_ble_scanner/) — Flutter app with scan, connect, and GATT UI
 
 ## Troubleshooting
