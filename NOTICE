@@ -1,0 +1,29 @@
+bluez_native
+Copyright 2026 Joel Winarske
+
+This product includes software developed by Joel Winarske
+(https://github.com/jwinarske/bluez_native), licensed under the
+Apache License, Version 2.0.
+
+Redistributions and derivative works must retain this NOTICE file, or
+reproduce its attribution notices, as required by Section 4(d) of the
+Apache License, Version 2.0.
+
+-------------------------------------------------------------------------------
+Third-party components
+-------------------------------------------------------------------------------
+
+sdbus-c++ (native/third_party/sdbus-cpp)
+  https://github.com/Kistler-Group/sdbus-cpp
+  Copyright (c) Kistler Group and contributors.
+  Licensed under the GNU Lesser General Public License, version 2.1.
+
+Dart SDK embedding headers and dynamic-linking shim
+(native/include/dart_api.h, dart_api_dl.h, dart_native_api.h,
+ dart_version.h, internal/dart_api_dl_impl.h, native/src/dart_api_dl.c)
+  https://github.com/dart-lang/sdk
+  Copyright (c) 2012-2020, the Dart project authors.
+  Licensed under the BSD 3-Clause License.
+
+Portions of the native-assets build hook and library loader are patterned
+after meta-flutter/appstream_dart (https://github.com/meta-flutter/appstream_dart).
