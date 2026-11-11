@@ -922,7 +922,7 @@ class SensirionGadget {
   /// path — it updates faster and does not depend on catching broadcasts.
   /// Temperature and humidity come from the legacy Smart Gadget
   /// characteristics as float32; CO2 comes from the SCD4x service as a 16-bit
-  /// ppm value. Cancelling the returned stream's subscription unsubscribes.
+  /// ppm value. Canceling the returned stream's subscription unsubscribes.
   Stream<(GadgetSignal, double)> liveValues() {
     final controller = StreamController<(GadgetSignal, double)>();
     final subs = <StreamSubscription<List<int>>>[];

@@ -1,4 +1,4 @@
-/// UUID normalisation for strings handed to BlueZ.
+/// UUID normalization for strings handed to BlueZ.
 library;
 
 const _baseSuffix = '-0000-1000-8000-00805f9b34fb';
