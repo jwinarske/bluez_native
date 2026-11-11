@@ -14,6 +14,7 @@ import 'exceptions.dart';
 import 'ffi/bindings.dart';
 import 'ffi/codec.dart';
 import 'ffi/types.dart';
+import 'ffi/uuid.dart';
 
 /// A Bluetooth device discovered or connected via BlueZ.
 class BlueZDevice {
@@ -113,6 +114,21 @@ class BlueZDevice {
         // Connection property change didn't arrive in time.
       }
     }
+  }
+
+  /// Connect a specific profile by its remote service [uuid].
+  ///
+  /// Short 16- and 32-bit forms are expanded to the full 128-bit UUID, and
+  /// case does not matter.
+  Future<void> connectProfile(BlueZUUID uuid) async {
+    final port = ReceivePort();
+    BlueZBindings.deviceConnectProfile(
+      _clientHandle,
+      objectPath,
+      canonicalUuid(uuid.value),
+      port.sendPort.nativePort,
+    );
+    await _awaitResult(port);
   }
 
   /// Disconnect from this device.

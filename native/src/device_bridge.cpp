@@ -2,6 +2,8 @@
 
 #include "device_bridge.h"
 
+#include "dart_result.h"
+
 #include <memory>
 #include <optional>
 #include <utility>
@@ -21,6 +23,14 @@ void DeviceBridge::connect_async(sdbus::IConnection& conn,
   call_device_method_async(conn, device_path, "Connect", result_port);
 }
 
+void DeviceBridge::connect_profile_async(sdbus::IConnection& conn,
+                                         const std::string& device_path,
+                                         const std::string& profile_uuid,
+                                         Dart_Port_DL result_port) {
+  call_device_method_async(conn, device_path, "ConnectProfile", result_port,
+                           profile_uuid);
+}
+
 void DeviceBridge::disconnect_async(sdbus::IConnection& conn,
                                     const std::string& device_path,
                                     Dart_Port_DL result_port) {
@@ -33,10 +43,12 @@ void DeviceBridge::pair_async(sdbus::IConnection& conn,
   call_device_method_async(conn, device_path, "Pair", result_port);
 }
 
+template <typename... Args>
 void DeviceBridge::call_device_method_async(sdbus::IConnection& conn,
                                             const std::string& device_path,
                                             const char* method_name,
-                                            Dart_Port_DL result_port) {
+                                            Dart_Port_DL result_port,
+                                            const Args&... args) {
   // The proxy must stay alive until the async callback fires.
   // Capture it as a shared_ptr in the callback lambda.
   auto proxy = std::shared_ptr<sdbus::IProxy>(
@@ -46,6 +58,7 @@ void DeviceBridge::call_device_method_async(sdbus::IConnection& conn,
 
   proxy->callMethodAsync(method_name)
       .onInterface(kDeviceIface)
+      .withArguments(args...)
       .uponReplyInvoke(
           [proxy, device_path, result_port](std::optional<sdbus::Error> error) {
             if (error) {
@@ -91,35 +104,12 @@ void DeviceBridge::set_property_string(const std::string& name,
 // ── Dart posting helpers ────────────────────────────────────────────────────
 
 void DeviceBridge::post_success(Dart_Port_DL result_port) {
-  uint8_t sentinel = 0xFF;
-  Dart_CObject obj;
-  obj.type = Dart_CObject_kTypedData;
-  obj.value.as_typed_data.type = Dart_TypedData_kUint8;
-  obj.value.as_typed_data.length = 1;
-  obj.value.as_typed_data.values = &sentinel;
-  Dart_PostCObject_DL(result_port, &obj);
+  dart_result::post_success(result_port);
 }
 
 void DeviceBridge::post_error(Dart_Port_DL result_port,
                               const std::string& object_path,
                               const std::string& error_name,
                               const std::string& error_message) {
-  BlueZError err;
-  err.objectPath = object_path;
-  err.name = error_name;
-  err.message = error_message;
-
-  auto payload = glz::encode(err);
-
-  std::vector<uint8_t> buf;
-  buf.reserve(1 + payload.size());
-  buf.push_back(0x20);
-  buf.insert(buf.end(), payload.begin(), payload.end());
-
-  Dart_CObject obj;
-  obj.type = Dart_CObject_kTypedData;
-  obj.value.as_typed_data.type = Dart_TypedData_kUint8;
-  obj.value.as_typed_data.length = static_cast<intptr_t>(buf.size());
-  obj.value.as_typed_data.values = buf.data();
-  Dart_PostCObject_DL(result_port, &obj);
+  dart_result::post_error(result_port, object_path, error_name, error_message);
 }

@@ -129,6 +129,7 @@ and snapshot the BlueZ object tree.
 |---|---|
 | `address`, `name`, `rssi`, `paired`, `connected` | Device state |
 | `connect()` / `disconnect()` | Connection management |
+| `connectProfile(uuid)` | Connect a specific Bluetooth profile |
 | `pair()` / `cancelPairing()` | Pairing |
 | `waitForServicesResolved()` | Wait for GATT discovery |
 | `gattServices` | Discovered GATT services |

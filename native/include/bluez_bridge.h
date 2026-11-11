@@ -43,6 +43,10 @@ BLUEZ_EXPORT void bluez_adapter_set_property(void* handle,
 BLUEZ_EXPORT void bluez_device_connect(void* handle,
                                        const char* device_path,
                                        int64_t result_port);
+BLUEZ_EXPORT void bluez_device_connect_profile(void* handle,
+                                               const char* device_path,
+                                               const char* profile_uuid,
+                                               int64_t result_port);
 BLUEZ_EXPORT void bluez_device_disconnect(void* handle,
                                           const char* device_path,
                                           int64_t result_port);

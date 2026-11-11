@@ -145,6 +145,12 @@ class BlueZBindings {
         void Function(Pointer<Void>, Pointer<Utf8>, int)
       >('bluez_device_connect');
 
+  static final _deviceConnectProfile = _lib
+      .lookupFunction<
+        Void Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Int64),
+        void Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, int)
+      >('bluez_device_connect_profile');
+
   static final _deviceDisconnect = _lib
       .lookupFunction<
         Void Function(Pointer<Void>, Pointer<Utf8>, Int64),
@@ -184,6 +190,19 @@ class BlueZBindings {
   static void deviceConnect(Object handle, String path, int resultPort) {
     final p = path.toNativeUtf8();
     _deviceConnect(handle as Pointer<Void>, p, resultPort);
+    calloc.free(p);
+  }
+
+  static void deviceConnectProfile(
+    Object handle,
+    String path,
+    String uuid,
+    int resultPort,
+  ) {
+    final p = path.toNativeUtf8();
+    final u = uuid.toNativeUtf8();
+    _deviceConnectProfile(handle as Pointer<Void>, p, u, resultPort);
+    calloc.free(u);
     calloc.free(p);
   }
 

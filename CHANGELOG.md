@@ -1,3 +1,29 @@
+## Unreleased
+
+- Add `BlueZDevice.connectProfile(uuid)`, wrapping Device1.ConnectProfile.
+  The UUID is lower-cased and 16- and 32-bit short forms are expanded to
+  128 bits first, since BlueZ matches the string against its own lower case
+  128-bit UUIDs and BlueZUUID equality ignores case.
+
+- Fix async operations that never completed. Every entry point that takes a
+  result port returned without posting to it when the handle named a client
+  that had been closed, so the Dart future awaiting that port stayed pending
+  forever: no error and no timeout. A null argument, or sdbus throwing before
+  the call was sent, did the same.
+
+  Those paths now fail with `BlueZOperationException`. A closed client
+  reports `org.bluez.Error.NotReady`, a null argument
+  `org.bluez.Error.InvalidArguments`. This covers connect, connectProfile,
+  disconnect, pair, and characteristic and descriptor read, write and
+  notify.
+
+- No exception can now leave a C ABI entry point. The fire-and-forget calls
+  caught only sdbus::Error, and the async ones caught nothing; anything else
+  crossing into Dart was std::terminate, which takes the VM with it.
+
+- A StartNotify that throws before the call is sent no longer leaves its
+  PropertiesChanged subscription behind.
+
 ## 0.3.2
 
 - Add a Sensirion SCD41 CO2 gadget example: `example/scd41_co2_sensor.dart`,

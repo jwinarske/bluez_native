@@ -2,6 +2,8 @@
 
 #include "gatt_bridge.h"
 
+#include "dart_result.h"
+
 #include <memory>
 #include <optional>
 #include <utility>
@@ -155,20 +157,27 @@ void GattCharBridge::start_notify_async(sdbus::IConnection& conn,
   // this went unnoticed.
   obj_mgr.subscribe_char_notify(char_path);
 
-  proxy->callMethodAsync("StartNotify")
-      .onInterface(kGattCharIface)
-      .uponReplyInvoke([proxy, char_path, &obj_mgr,
-                        result_port](std::optional<sdbus::Error> error) {
-        if (error) {
-          // Roll back the early subscription so a failed StartNotify does not
-          // leave a listener behind.
-          obj_mgr.unsubscribe_char_notify(char_path);
-          post_error(result_port, char_path, error->getName(),
-                     error->getMessage());
-        } else {
-          verify_notifying(proxy, char_path, /*expected=*/true, result_port);
-        }
-      });
+  try {
+    proxy->callMethodAsync("StartNotify")
+        .onInterface(kGattCharIface)
+        .uponReplyInvoke([proxy, char_path, &obj_mgr,
+                          result_port](std::optional<sdbus::Error> error) {
+          if (error) {
+            // Roll back the early subscription so a failed StartNotify does
+            // not leave a listener behind.
+            obj_mgr.unsubscribe_char_notify(char_path);
+            post_error(result_port, char_path, error->getName(),
+                       error->getMessage());
+          } else {
+            verify_notifying(proxy, char_path, /*expected=*/true, result_port);
+          }
+        });
+  } catch (...) {
+    // The call never went out, so no reply will roll the subscription back.
+    // The caller reports the error.
+    obj_mgr.unsubscribe_char_notify(char_path);
+    throw;
+  }
 }
 
 void GattCharBridge::stop_notify_async(sdbus::IConnection& conn,
@@ -199,13 +208,7 @@ void GattCharBridge::stop_notify_async(sdbus::IConnection& conn,
 // ── Dart posting helpers ────────────────────────────────────────────────────
 
 void GattCharBridge::post_success(Dart_Port_DL result_port) {
-  uint8_t sentinel = 0xFF;
-  Dart_CObject obj;
-  obj.type = Dart_CObject_kTypedData;
-  obj.value.as_typed_data.type = Dart_TypedData_kUint8;
-  obj.value.as_typed_data.length = 1;
-  obj.value.as_typed_data.values = &sentinel;
-  Dart_PostCObject_DL(result_port, &obj);
+  dart_result::post_success(result_port);
 }
 
 void GattCharBridge::post_value_result(Dart_Port_DL result_port,
@@ -234,24 +237,7 @@ void GattCharBridge::post_error(Dart_Port_DL result_port,
                                 const std::string& object_path,
                                 const std::string& error_name,
                                 const std::string& error_message) {
-  BlueZError err;
-  err.objectPath = object_path;
-  err.name = error_name;
-  err.message = error_message;
-
-  auto payload = glz::encode(err);
-
-  std::vector<uint8_t> buf;
-  buf.reserve(1 + payload.size());
-  buf.push_back(0x20);
-  buf.insert(buf.end(), payload.begin(), payload.end());
-
-  Dart_CObject obj;
-  obj.type = Dart_CObject_kTypedData;
-  obj.value.as_typed_data.type = Dart_TypedData_kUint8;
-  obj.value.as_typed_data.length = static_cast<intptr_t>(buf.size());
-  obj.value.as_typed_data.values = buf.data();
-  Dart_PostCObject_DL(result_port, &obj);
+  dart_result::post_error(result_port, object_path, error_name, error_message);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -312,13 +298,7 @@ void GattDescBridge::write_value_async(sdbus::IConnection& conn,
 // ── Dart posting helpers ────────────────────────────────────────────────────
 
 void GattDescBridge::post_success(Dart_Port_DL result_port) {
-  uint8_t sentinel = 0xFF;
-  Dart_CObject obj;
-  obj.type = Dart_CObject_kTypedData;
-  obj.value.as_typed_data.type = Dart_TypedData_kUint8;
-  obj.value.as_typed_data.length = 1;
-  obj.value.as_typed_data.values = &sentinel;
-  Dart_PostCObject_DL(result_port, &obj);
+  dart_result::post_success(result_port);
 }
 
 void GattDescBridge::post_value_result(Dart_Port_DL result_port,
@@ -347,22 +327,5 @@ void GattDescBridge::post_error(Dart_Port_DL result_port,
                                 const std::string& object_path,
                                 const std::string& error_name,
                                 const std::string& error_message) {
-  BlueZError err;
-  err.objectPath = object_path;
-  err.name = error_name;
-  err.message = error_message;
-
-  auto payload = glz::encode(err);
-
-  std::vector<uint8_t> buf;
-  buf.reserve(1 + payload.size());
-  buf.push_back(0x20);
-  buf.insert(buf.end(), payload.begin(), payload.end());
-
-  Dart_CObject obj;
-  obj.type = Dart_CObject_kTypedData;
-  obj.value.as_typed_data.type = Dart_TypedData_kUint8;
-  obj.value.as_typed_data.length = static_cast<intptr_t>(buf.size());
-  obj.value.as_typed_data.values = buf.data();
-  Dart_PostCObject_DL(result_port, &obj);
+  dart_result::post_error(result_port, object_path, error_name, error_message);
 }

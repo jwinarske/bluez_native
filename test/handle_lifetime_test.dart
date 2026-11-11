@@ -47,6 +47,12 @@ void main() {
         '/org/bluez/hci0/dev_00_00_00_00_00_00',
         0,
       );
+      BlueZBindings.deviceConnectProfile(
+        h,
+        '/org/bluez/hci0/dev_00_00_00_00_00_00',
+        '0000111e-0000-1000-8000-00805f9b34fb',
+        0,
+      );
       BlueZBindings.charWriteValue(
         h,
         '/org/bluez/hci0/dev_00_00_00_00_00_00/service0001/char0002',
