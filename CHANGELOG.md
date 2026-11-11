@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.3
 
 - Add `BlueZDevice.connectProfile(uuid)`, wrapping Device1.ConnectProfile.
   The UUID is lower-cased and 16- and 32-bit short forms are expanded to
