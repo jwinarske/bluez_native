@@ -65,7 +65,7 @@
   whose handle names nothing does nothing. The token is a counter rather than
   the address of the context: an allocator can reissue a freed address, and a
   stale handle would then name a different live client and act on it, which
-  is defined behaviour and the wrong client.
+  is defined behavior and the wrong client.
 
   Lookup returns a shared_ptr so a client cannot be destroyed while a call is
   using it. Destruction removes it from the registry immediately, so no later
