@@ -28,6 +28,7 @@ class DeviceBridge {
                             Dart_Port_DL result_port);
 
   // Connect a specific profile by its remote service UUID.
+  // Posts 0xFF sentinel on success, 0x20 BlueZError on failure.
   static void connect_profile_async(sdbus::IConnection& conn,
                                     const std::string& device_path,
                                     const std::string& profile_uuid,
@@ -67,11 +68,14 @@ class DeviceBridge {
   std::unique_ptr<sdbus::IProxy> proxy_;
 
   // Helper to create and execute an async D-Bus method call, keeping the
-  // proxy alive via shared_ptr captured in the reply callback.
+  // proxy alive via shared_ptr captured in the reply callback. Any args are
+  // passed through as the method's input arguments.
+  template <typename... Args>
   static void call_device_method_async(sdbus::IConnection& conn,
                                        const std::string& device_path,
                                        const char* method_name,
-                                       Dart_Port_DL result_port);
+                                       Dart_Port_DL result_port,
+                                       const Args&... args);
 
   // Post a success sentinel (0xFF) to result_port.
   static void post_success(Dart_Port_DL result_port);

@@ -20,11 +20,23 @@
 // address. A stale handle would then name a different live client and quietly
 // act on it: defined behaviour, wrong client, no error. Counters are not
 // reused, so a stale handle is always recognisable as stale.
+//
+// RESULT PORTS
+//
+// An entry point that takes a result_port owes it exactly one message, on
+// every path. Dart awaits the first message on that port and nothing else
+// completes the future, so returning early -- a stale handle, a null
+// argument, a throw from sdbus before the call is sent -- used to leave the
+// caller awaiting forever. Those paths now post a BlueZError instead.
+//
+// No exception leaves an entry point. One crossing the C ABI into Dart is
+// std::terminate, and it takes the VM with it.
 
 #include "bluez_bridge.h"
 
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -32,6 +44,7 @@
 #include <unordered_map>
 
 #include "adapter_bridge.h"
+#include "dart_result.h"
 #include "device_bridge.h"
 #include "gatt_bridge.h"
 #include "object_manager.h"
@@ -93,6 +106,61 @@ std::shared_ptr<BridgeContext> client_for(void* handle) {
   return it == reg.clients.end() ? nullptr : it->second;
 }
 
+/// True if none of the pointers is null.
+template <typename... Ptrs>
+bool all_set(const Ptrs*... ptrs) {
+  return ((ptrs != nullptr) && ...);
+}
+
+/// Runs an async operation against the client a handle names.
+///
+/// `op` starts a D-Bus call whose reply posts to result_port. Every path that
+/// does not get as far as sending the call posts an error here instead, so
+/// the port always hears back once.
+template <typename Op>
+void run_async(void* handle,
+               const char* object_path,
+               int64_t result_port,
+               Op&& op) {
+  if (object_path == nullptr) {
+    dart_result::post_error(result_port, "", dart_result::kInvalidArguments,
+                            "object path is null");
+    return;
+  }
+  try {
+    const auto ctx = client_for(handle);
+    if (!ctx) {
+      dart_result::post_error(result_port, object_path,
+                              dart_result::kClientClosed,
+                              "the BlueZ client has been closed");
+      return;
+    }
+    op(*ctx);
+  } catch (const sdbus::Error& e) {
+    dart_result::post_error(result_port, object_path, e.getName(),
+                            e.getMessage());
+  } catch (const std::exception& e) {
+    dart_result::post_error(result_port, object_path, dart_result::kFailed,
+                            e.what());
+  }
+}
+
+/// Runs a synchronous, fire-and-forget operation against the client a handle
+/// names. There is no port to report to, so failures go to stderr.
+template <typename Op>
+void run_sync(const char* fn_name, void* handle, Op&& op) {
+  try {
+    const auto ctx = client_for(handle);
+    if (!ctx)
+      return;
+    op(*ctx);
+  } catch (const sdbus::Error& e) {
+    fprintf(stderr, "%s: %s\n", fn_name, e.what());
+  } catch (const std::exception& e) {
+    fprintf(stderr, "%s: %s\n", fn_name, e.what());
+  }
+}
+
 }  // namespace
 
 extern "C" {
@@ -142,6 +210,9 @@ void* bluez_client_create(int64_t events_port) {
     // BlueZ service not available — return null so Dart can throw
     // BlueZServiceUnavailableException.
     return nullptr;
+  } catch (const std::exception& e) {
+    fprintf(stderr, "bluez_client_create: %s\n", e.what());
+    return nullptr;
   }
 }
 
@@ -165,9 +236,13 @@ void bluez_client_destroy(void* handle) {
   // notices, and that thread takes no part in the registry -- holding the
   // lock across it would serialise every other client's calls behind this
   // one shutting down.
-  ctx->conn->leaveEventLoop();
-  if (ctx->event_loop.joinable()) {
-    ctx->event_loop.join();
+  try {
+    ctx->conn->leaveEventLoop();
+    if (ctx->event_loop.joinable()) {
+      ctx->event_loop.join();
+    }
+  } catch (const std::exception& e) {
+    fprintf(stderr, "bluez_client_destroy: %s\n", e.what());
   }
   // The context dies here unless a call is still in flight against it, in
   // which case it dies when that call returns.
@@ -176,38 +251,31 @@ void bluez_client_destroy(void* handle) {
 // ── Adapter operations ──────────────────────────────────────────────────────
 
 void bluez_adapter_start_discovery(void* handle, const char* adapter_path) {
-  try {
-    const auto ctx = client_for(handle);
-    if (!ctx)
-      return;
-    AdapterBridge adapter(*ctx->conn, adapter_path);
+  if (!all_set(adapter_path))
+    return;
+  run_sync(__func__, handle, [&](BridgeContext& ctx) {
+    AdapterBridge adapter(*ctx.conn, adapter_path);
     adapter.start_discovery();
-  } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_adapter_start_discovery: %s\n", e.what());
-  }
+  });
 }
 
 void bluez_adapter_stop_discovery(void* handle, const char* adapter_path) {
-  try {
-    const auto ctx = client_for(handle);
-    if (!ctx)
-      return;
-    AdapterBridge adapter(*ctx->conn, adapter_path);
+  if (!all_set(adapter_path))
+    return;
+  run_sync(__func__, handle, [&](BridgeContext& ctx) {
+    AdapterBridge adapter(*ctx.conn, adapter_path);
     adapter.stop_discovery();
-  } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_adapter_stop_discovery: %s\n", e.what());
-  }
+  });
 }
 
 void bluez_adapter_set_discovery_filter(void* handle,
                                         const char* adapter_path,
                                         const uint8_t* filter_json,
                                         int32_t len) {
-  try {
-    const auto ctx = client_for(handle);
-    if (!ctx)
-      return;
-    AdapterBridge adapter(*ctx->conn, adapter_path);
+  if (!all_set(adapter_path))
+    return;
+  run_sync(__func__, handle, [&](BridgeContext& ctx) {
+    AdapterBridge adapter(*ctx.conn, adapter_path);
 
     // Decode the filter from glaze binary: Transport(s), UUIDs(as), RSSI(n).
     std::map<std::string, sdbus::Variant> filter;
@@ -217,23 +285,18 @@ void bluez_adapter_set_discovery_filter(void* handle,
       (void)len;
     }
     adapter.set_discovery_filter(filter);
-  } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_adapter_set_discovery_filter: %s\n", e.what());
-  }
+  });
 }
 
 void bluez_adapter_remove_device(void* handle,
                                  const char* adapter_path,
                                  const char* device_path) {
-  try {
-    const auto ctx = client_for(handle);
-    if (!ctx)
-      return;
-    AdapterBridge adapter(*ctx->conn, adapter_path);
+  if (!all_set(adapter_path, device_path))
+    return;
+  run_sync(__func__, handle, [&](BridgeContext& ctx) {
+    AdapterBridge adapter(*ctx.conn, adapter_path);
     adapter.remove_device(device_path);
-  } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_adapter_remove_device: %s\n", e.what());
-  }
+  });
 }
 
 void bluez_adapter_set_property(void* handle,
@@ -241,11 +304,10 @@ void bluez_adapter_set_property(void* handle,
                                 const char* prop_name,
                                 const uint8_t* value_json,
                                 int32_t len) {
-  try {
-    const auto ctx = client_for(handle);
-    if (!ctx)
-      return;
-    AdapterBridge adapter(*ctx->conn, adapter_path);
+  if (!all_set(adapter_path, prop_name, value_json))
+    return;
+  run_sync(__func__, handle, [&](BridgeContext& ctx) {
+    AdapterBridge adapter(*ctx.conn, adapter_path);
 
     // Decode property value from glaze binary.
     // For bool properties, the first byte is 0/1.
@@ -253,56 +315,39 @@ void bluez_adapter_set_property(void* handle,
       // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
       adapter.set_property_bool(prop_name, value_json[0] != 0);
     }
-  } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_adapter_set_property: %s\n", e.what());
-  }
+  });
 }
 
 // ── Pairing agent ──────────────────────────────────────────────────────────
 
 void bluez_agent_register(void* handle) {
-  if (handle == nullptr)
-    return;
-  try {
-    const auto ctx = client_for(handle);
-    if (!ctx)
-      return;
-    if (!ctx->agent) {
-      ctx->agent = std::make_unique<PairingAgent>(*ctx->conn, ctx->events_port);
+  run_sync(__func__, handle, [](BridgeContext& ctx) {
+    if (!ctx.agent) {
+      ctx.agent = std::make_unique<PairingAgent>(*ctx.conn, ctx.events_port);
     }
-    ctx->agent->register_agent();
-  } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_agent_register: %s\n", e.what());
-  }
+    ctx.agent->register_agent();
+  });
 }
 
 void bluez_agent_unregister(void* handle) {
-  if (handle == nullptr)
-    return;
-  try {
-    const auto ctx = client_for(handle);
-    if (!ctx)
-      return;
-    if (ctx->agent) {
-      ctx->agent->unregister_agent();
-      ctx->agent.reset();
+  run_sync(__func__, handle, [](BridgeContext& ctx) {
+    if (ctx.agent) {
+      ctx.agent->unregister_agent();
+      ctx.agent.reset();
     }
-  } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_agent_unregister: %s\n", e.what());
-  }
+  });
 }
 
 void bluez_agent_respond(void* handle,
                          uint64_t request_id,
                          bool accepted,
                          const char* response) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  if (ctx->agent) {
-    ctx->agent->respond(request_id, accepted,
-                        response != nullptr ? response : "");
-  }
+  run_sync(__func__, handle, [&](BridgeContext& ctx) {
+    if (ctx.agent) {
+      ctx.agent->respond(request_id, accepted,
+                         response != nullptr ? response : "");
+    }
+  });
 }
 
 // ── Device operations ───────────────────────────────────────────────────────
@@ -310,51 +355,50 @@ void bluez_agent_respond(void* handle,
 void bluez_device_connect(void* handle,
                           const char* device_path,
                           int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  DeviceBridge::connect_async(*ctx->conn, device_path, result_port);
+  run_async(handle, device_path, result_port, [&](BridgeContext& ctx) {
+    DeviceBridge::connect_async(*ctx.conn, device_path, result_port);
+  });
 }
 
 void bluez_device_connect_profile(void* handle,
                                   const char* device_path,
                                   const char* profile_uuid,
                                   int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  DeviceBridge::connect_profile_async(*ctx->conn, device_path, profile_uuid,
-                                      result_port);
+  run_async(handle, device_path, result_port, [&](BridgeContext& ctx) {
+    if (profile_uuid == nullptr) {
+      dart_result::post_error(result_port, device_path,
+                              dart_result::kInvalidArguments,
+                              "profile UUID is null");
+      return;
+    }
+    DeviceBridge::connect_profile_async(*ctx.conn, device_path, profile_uuid,
+                                        result_port);
+  });
 }
 
 void bluez_device_disconnect(void* handle,
                              const char* device_path,
                              int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  DeviceBridge::disconnect_async(*ctx->conn, device_path, result_port);
+  run_async(handle, device_path, result_port, [&](BridgeContext& ctx) {
+    DeviceBridge::disconnect_async(*ctx.conn, device_path, result_port);
+  });
 }
 
 void bluez_device_pair(void* handle,
                        const char* device_path,
                        int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  DeviceBridge::pair_async(*ctx->conn, device_path, result_port);
+  run_async(handle, device_path, result_port, [&](BridgeContext& ctx) {
+    DeviceBridge::pair_async(*ctx.conn, device_path, result_port);
+  });
 }
 
 void bluez_device_cancel_pairing(void* handle, const char* device_path) {
-  try {
-    const auto ctx = client_for(handle);
-    if (!ctx)
-      return;
-    DeviceBridge device(*ctx->conn, device_path);
+  if (!all_set(device_path))
+    return;
+  run_sync(__func__, handle, [&](BridgeContext& ctx) {
+    DeviceBridge device(*ctx.conn, device_path);
     device.cancel_pairing();
-  } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_device_cancel_pairing: %s\n", e.what());
-  }
+  });
 }
 
 void bluez_device_set_property(void* handle,
@@ -362,19 +406,16 @@ void bluez_device_set_property(void* handle,
                                const char* prop_name,
                                const uint8_t* value_json,
                                int32_t len) {
-  try {
-    const auto ctx = client_for(handle);
-    if (!ctx)
-      return;
-    DeviceBridge device(*ctx->conn, device_path);
+  if (!all_set(device_path, prop_name, value_json))
+    return;
+  run_sync(__func__, handle, [&](BridgeContext& ctx) {
+    DeviceBridge device(*ctx.conn, device_path);
 
     if (len == 1) {
       // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
       device.set_property_bool(prop_name, value_json[0] != 0);
     }
-  } catch (const sdbus::Error& e) {
-    fprintf(stderr, "bluez_device_set_property: %s\n", e.what());
-  }
+  });
 }
 
 // ── GATT characteristic operations ──────────────────────────────────────────
@@ -382,10 +423,9 @@ void bluez_device_set_property(void* handle,
 void bluez_char_read_value(void* handle,
                            const char* char_path,
                            int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  GattCharBridge::read_value_async(*ctx->conn, char_path, result_port);
+  run_async(handle, char_path, result_port, [&](BridgeContext& ctx) {
+    GattCharBridge::read_value_async(*ctx.conn, char_path, result_port);
+  });
 }
 
 void bluez_char_write_value(void* handle,
@@ -394,31 +434,28 @@ void bluez_char_write_value(void* handle,
                             int32_t len,
                             bool with_response,
                             int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  GattCharBridge::write_value_async(*ctx->conn, char_path, value_buf, len,
-                                    with_response, result_port);
+  run_async(handle, char_path, result_port, [&](BridgeContext& ctx) {
+    GattCharBridge::write_value_async(*ctx.conn, char_path, value_buf, len,
+                                      with_response, result_port);
+  });
 }
 
 void bluez_char_start_notify(void* handle,
                              const char* char_path,
                              int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  GattCharBridge::start_notify_async(*ctx->conn, char_path, *ctx->obj_mgr,
-                                     result_port);
+  run_async(handle, char_path, result_port, [&](BridgeContext& ctx) {
+    GattCharBridge::start_notify_async(*ctx.conn, char_path, *ctx.obj_mgr,
+                                       result_port);
+  });
 }
 
 void bluez_char_stop_notify(void* handle,
                             const char* char_path,
                             int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  GattCharBridge::stop_notify_async(*ctx->conn, char_path, *ctx->obj_mgr,
-                                    result_port);
+  run_async(handle, char_path, result_port, [&](BridgeContext& ctx) {
+    GattCharBridge::stop_notify_async(*ctx.conn, char_path, *ctx.obj_mgr,
+                                      result_port);
+  });
 }
 
 // ── GATT descriptor operations ──────────────────────────────────────────────
@@ -426,10 +463,9 @@ void bluez_char_stop_notify(void* handle,
 void bluez_desc_read_value(void* handle,
                            const char* desc_path,
                            int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  GattDescBridge::read_value_async(*ctx->conn, desc_path, result_port);
+  run_async(handle, desc_path, result_port, [&](BridgeContext& ctx) {
+    GattDescBridge::read_value_async(*ctx.conn, desc_path, result_port);
+  });
 }
 
 void bluez_desc_write_value(void* handle,
@@ -437,11 +473,10 @@ void bluez_desc_write_value(void* handle,
                             const uint8_t* value_buf,
                             int32_t len,
                             int64_t result_port) {
-  const auto ctx = client_for(handle);
-  if (!ctx)
-    return;
-  GattDescBridge::write_value_async(*ctx->conn, desc_path, value_buf, len,
-                                    result_port);
+  run_async(handle, desc_path, result_port, [&](BridgeContext& ctx) {
+    GattDescBridge::write_value_async(*ctx.conn, desc_path, value_buf, len,
+                                      result_port);
+  });
 }
 
 }  // extern "C"
