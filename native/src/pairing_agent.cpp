@@ -163,7 +163,7 @@ void PairingAgent::on_authorize_service(sdbus::Result<>&& result,
 void PairingAgent::on_cancel() {
   post_request(0, kAgentCancel, "", 0, 0, "", "");
 
-  // Reject all pending requests — BlueZ has cancelled them.
+  // Reject all pending requests — BlueZ has canceled them.
   std::scoped_lock lock(pending_mutex_);
   for (auto& [id, req] : pending_) {
     std::visit(
@@ -193,7 +193,7 @@ void PairingAgent::respond(uint64_t request_id,
     std::scoped_lock lock(pending_mutex_);
     auto it = pending_.find(request_id);
     if (it == pending_.end()) {
-      return;  // Already cancelled or timed out.
+      return;  // Already canceled or timed out.
     }
     req = std::move(it->second);
     pending_.erase(it);

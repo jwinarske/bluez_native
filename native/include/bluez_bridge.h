@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-// Initialise Dart API dynamic linking. Call once at startup.
+// Initialize Dart API dynamic linking. Call once at startup.
 BLUEZ_EXPORT void bluez_bridge_init(void* dart_api_dl_data);
 
 // ── Client lifecycle ────────────────────────────────────────────────────────

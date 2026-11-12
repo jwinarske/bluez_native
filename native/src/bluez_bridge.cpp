@@ -18,8 +18,8 @@
 //
 // A counter rather than the address, because an allocator can reissue a freed
 // address. A stale handle would then name a different live client and quietly
-// act on it: defined behaviour, wrong client, no error. Counters are not
-// reused, so a stale handle is always recognisable as stale.
+// act on it: defined behavior, wrong client, no error. Counters are not
+// reused, so a stale handle is always recognizable as stale.
 //
 // RESULT PORTS
 //
@@ -63,7 +63,7 @@ namespace {
 /// The live clients.
 ///
 /// Held in a function-local static rather than at namespace scope: there is
-/// no static initialisation order to get wrong, and it is constructed the
+/// no static initialization order to get wrong, and it is constructed the
 /// first time a client is created rather than before main.
 struct ClientRegistry {
   std::mutex mutex;
@@ -234,7 +234,7 @@ void bluez_client_destroy(void* handle) {
 
   // Outside the lock. Leaving the event loop blocks until the loop thread
   // notices, and that thread takes no part in the registry -- holding the
-  // lock across it would serialise every other client's calls behind this
+  // lock across it would serialize every other client's calls behind this
   // one shutting down.
   try {
     ctx->conn->leaveEventLoop();
