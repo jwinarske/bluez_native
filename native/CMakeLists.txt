@@ -6,11 +6,24 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ── sdbus-cpp v2 as submodule ────────────────────────────────────────────────
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# sdbus-c++ is LGPL-2.1. Built shared and linked dynamically so its object
+# code stays out of libbluez_nc.so, which is Apache-2.0: a static link would
+# put LGPL objects inside this project's library and bring Section 6 with
+# them. Built here rather than taken from the system because the consumer
+# chooses its C++ standard library, and sdbus-c++'s API is std::string
+# heavy -- a libstdc++ build cannot satisfy a libc++ consumer.
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 set(SDBUSCPP_BUILD_CODEGEN OFF CACHE BOOL "" FORCE)
 set(SDBUSCPP_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(third_party/sdbus-cpp EXCLUDE_FROM_ALL)
+
+# Beside libbluez_nc.so, not under third_party/. The hook consumes both from
+# the build directory, $ORIGIN resolves one from the other, and a separate
+# directory makes CMake record the absolute build path in RUNPATH instead.
+set_target_properties(sdbus-c++ PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)
 
 # ── dart_api_dl — compile as plain C ────────────────────────────────────────
 add_library(dart_api_dl OBJECT src/dart_api_dl.c)
@@ -53,6 +66,12 @@ set_target_properties(bluez_nc PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     POSITION_INDEPENDENT_CODE ON
     OUTPUT_NAME "bluez_nc"
+    # libsdbus-c++.so.2 ships beside this library, so resolve it relatively.
+    INSTALL_RPATH "$ORIGIN"
+    # The hook consumes the artifact straight from the build directory and
+    # never installs, so the build-tree RPATH is what ships. Use the install
+    # RPATH during the build or CMake writes the absolute build path in.
+    BUILD_WITH_INSTALL_RPATH TRUE
 )
 
 # When building in-tree (not via the Dart native asset hook), stage the
