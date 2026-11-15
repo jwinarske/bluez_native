@@ -18,13 +18,6 @@ set(SDBUSCPP_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(third_party/sdbus-cpp EXCLUDE_FROM_ALL)
 
-# Beside libbluez_nc.so, not under third_party/. The hook consumes both from
-# the build directory, $ORIGIN resolves one from the other, and a separate
-# directory makes CMake record the absolute build path in RUNPATH instead.
-set_target_properties(sdbus-c++ PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-)
-
 # ── dart_api_dl — compile as plain C ────────────────────────────────────────
 add_library(dart_api_dl OBJECT src/dart_api_dl.c)
 target_include_directories(dart_api_dl PUBLIC include)
@@ -78,12 +71,20 @@ set_target_properties(bluez_nc PROPERTIES
 # shared library into lib/ so the legacy DynamicLibrary.open() loader and
 # in-tree tooling can locate it. The hook build sets BLUEZ_HOOK_BUILD=ON
 # and consumes the artifact directly from the CMake build directory.
+#
+# libsdbus-c++.so.2 goes wherever libbluez_nc.so goes, and never under
+# third_party/. bluez_nc resolves it by $ORIGIN, so the two have to stay
+# together in both layouts -- and placing them apart also makes CMake record
+# the absolute build path in RUNPATH rather than just $ORIGIN.
 option(BLUEZ_HOOK_BUILD "Build is driven by the Dart package:hooks build hook" OFF)
-if(NOT BLUEZ_HOOK_BUILD)
-    set_target_properties(bluez_nc PROPERTIES
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../lib"
-    )
+if(BLUEZ_HOOK_BUILD)
+    set(BLUEZ_LIB_OUTPUT_DIR "${CMAKE_BINARY_DIR}")
+else()
+    set(BLUEZ_LIB_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/../lib")
 endif()
+set_target_properties(bluez_nc sdbus-c++ PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${BLUEZ_LIB_OUTPUT_DIR}"
+)
 
 if(BUILD_TESTING)
     enable_testing()

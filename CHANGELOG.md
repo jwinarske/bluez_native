@@ -13,6 +13,10 @@
   std::string heavy -- a distribution's libstdc++ build cannot satisfy a
   libc++ consumer.
 
+  libsdbus-c++.so.2 is staged wherever libbluez_nc.so is, so an in-tree
+  build gets it in lib/ beside the library the legacy loader opens, and a
+  hook build gets it in the build directory for bundling.
+
   Anything packaging this now has to ship libsdbus-c++.so.2 with the
   library, and declare LGPL-2.1 alongside Apache-2.0.
 
