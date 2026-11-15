@@ -1,4 +1,4 @@
-## Unreleased
+## 0.4.0
 
 - Build the bundled sdbus-c++ as a shared library and link it dynamically.
   It is LGPL-2.1, and a static link put its object code inside
