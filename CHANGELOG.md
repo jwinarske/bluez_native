@@ -1,3 +1,25 @@
+## Unreleased
+
+- Build the bundled sdbus-c++ as a shared library and link it dynamically.
+  It is LGPL-2.1, and a static link put its object code inside
+  libbluez_nc.so, which is Apache-2.0, bringing LGPL Section 6 with it. The
+  library now ships beside libbluez_nc.so and the hook bundles it, so no
+  LGPL object code is inside this project's library: 432 sdbus symbols were
+  defined in libbluez_nc.so before, none are now, and it is about half the
+  size.
+
+  Still built from the submodule rather than taken from the system, because
+  the consumer chooses the C++ standard library and sdbus-c++'s API is
+  std::string heavy -- a distribution's libstdc++ build cannot satisfy a
+  libc++ consumer.
+
+  libsdbus-c++.so.2 is staged wherever libbluez_nc.so is, so an in-tree
+  build gets it in lib/ beside the library the legacy loader opens, and a
+  hook build gets it in the build directory for bundling.
+
+  Anything packaging this now has to ship libsdbus-c++.so.2 with the
+  library, and declare LGPL-2.1 alongside Apache-2.0.
+
 ## 0.3.3
 
 - Add `BlueZDevice.connectProfile(uuid)`, wrapping Device1.ConnectProfile.

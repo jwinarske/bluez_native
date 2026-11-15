@@ -21,6 +21,9 @@ Thumbs.db
 
 # Compiled
 *.so
+# Versioned sonames: an in-tree build stages libsdbus-c++.so.2 and the
+# versioned file it points at into lib/, and *.so does not match either.
+*.so.*
 *.dylib
 *.o
 *.a

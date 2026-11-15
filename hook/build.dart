@@ -84,6 +84,33 @@ void main(List<String> args) async {
       ),
     );
 
+    // sdbus-c++ is LGPL-2.1 and is linked dynamically, so it has to ship
+    // beside libbluez_nc.so rather than inside it. libbluez_nc.so's DT_NEEDED
+    // names the SONAME, so the bundled file has to carry that exact name --
+    // the build tree has it only as a symlink to the versioned file, and a
+    // bundled symlink would dangle. Stage a real file under the SONAME.
+    const sdbusSoname = 'libsdbus-c++.so.2';
+    final sdbusLink = File('$buildDir$sdbusSoname');
+    if (!sdbusLink.existsSync()) {
+      throw StateError('$sdbusSoname not found at ${sdbusLink.path}');
+    }
+    final sdbusStaged = File(
+      input.outputDirectory.resolve(sdbusSoname).toFilePath(),
+    );
+    await sdbusStaged.writeAsBytes(
+      await File(await sdbusLink.resolveSymbolicLinks()).readAsBytes(),
+      flush: true,
+    );
+
+    output.assets.code.add(
+      CodeAsset(
+        package: input.packageName,
+        name: 'src/ffi/sdbus_cpp_asset.dart',
+        linkMode: DynamicLoadingBundled(),
+        file: sdbusStaged.uri,
+      ),
+    );
+
     // Re-run the hook whenever any C/C++ source or CMake file changes.
     for (final dir in ['src', 'include']) {
       final d = Directory('$nativeRoot/$dir');
@@ -103,6 +130,7 @@ void main(List<String> args) async {
     output.dependencies.add(Uri.file('$nativeRoot/CMakeLists.txt'));
 
     stderr.writeln('libbluez_nc built: ${libFile.path}');
+    stderr.writeln('$sdbusSoname staged: ${sdbusStaged.path}');
   });
 }
 
